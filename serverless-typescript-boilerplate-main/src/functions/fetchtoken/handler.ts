@@ -126,10 +126,11 @@ if (arg === tokenListUrls_[i].key) {
 }
 
 //       
- fetchAllTokenListDetails(ChainId.POLYGON);
+ fetchAllTokenListDetails(ChainId.SOLANA);
 
  // Retrieve token list details from Redis
 async function retrieveTokenListDetailsFromRedis(key: ChainId) {
+  
   try {
     const redisKey = `tokenList:${key}`;
 
@@ -151,16 +152,19 @@ async function retrieveTokenListDetailsFromRedis(key: ChainId) {
 }
 
 // Example usage
-retrieveTokenListDetailsFromRedis(ChainId.POLYGON);
+retrieveTokenListDetailsFromRedis(ChainId.FANTOM);
 
  
 
 
 
   
+  // Retrieve token list details from Redis 
+  const tokenListDetails = await retrieveTokenListDetailsFromRedis(ChainId.FANTOM);
+  console.log('tokenListDetails')
   return formatJSONResponse({
-    message: 200,
-    event,
+    message: 'Token list details retrieved successfully',
+    data: tokenListDetails,
   });
 };
 
