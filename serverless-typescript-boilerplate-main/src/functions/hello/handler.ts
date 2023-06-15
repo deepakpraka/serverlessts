@@ -9,7 +9,7 @@ import schema from './schema';
 const hello: ValidatedEventAPIGatewayProxyEvent<typeof schema> = async (
   event,
 ) => {
-
+console.log(event)
   return formatJSONResponse({
     message: `Hello, welcome to the exciting Serverless world!`,
     event,
