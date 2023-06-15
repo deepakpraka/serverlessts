@@ -1,10 +1,9 @@
 import 'source-map-support/register';
-import type { ValidatedEventAPIGatewayProxyEvent } from '@/libs/apiGateway';
+import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatJSONResponse } from '@/libs/apiGateway';
 import { middyfy } from '@/libs/lambda';
-import schema from './schema';
-import axios from 'axios';
 import { createClient } from 'redis';
+import axios from 'axios';
 
 enum ChainId {
   SOLANA = 0,
@@ -16,20 +15,21 @@ enum ChainId {
   FANTOM = 6,
 }
 
+const redisClient = createClient();
+redisClient.connect().catch(console.error);
+
 const fetchTokenListDetails = async (url: string) => {
   try {
     const response = await axios.get(url);
     const tokenListDetails = response.data;
-    const transformedDetails = tokenListDetails.map((value: any) => {
-      return {
-        address: value.address,
-        chainId: value.chainId,
-        symbol: value.symbol,
-        logoURI: value.logoURI,
-        coingecko_id: value.coingeckoId,
-        decimals: value.decimals,
-      };
-    });
+    const transformedDetails = tokenListDetails.map((value: any) => ({
+      address: value.address,
+      chainId: value.chainId,
+      symbol: value.symbol,
+      logoURI: value.logoURI,
+      coingecko_id: value.coingeckoId,
+      decimals: value.decimals,
+    }));
 
     console.log(`Token list details for URL ${url}:`, transformedDetails);
     return transformedDetails;
@@ -55,7 +55,7 @@ const fetchAndStoreTokenListDetails = async (url: string, key: ChainId, redisCli
 };
 
 const fetchAllTokenListDetails = async (arg: ChainId, redisClient: any) => {
-  const tokenListUrls_ = [
+  const tokenListUrls = [
     { url: 'https://cache.jup.ag/tokens', key: ChainId.SOLANA },
     { url: 'https://raw.githubusercontent.com/hippospace/aptos-coin-list/main/typescript/src/defaultList.mainnet.json', key: ChainId.APTOS },
     { url: 'https://raw.githubusercontent.com/0xAnto/token-lists/main/polygon.json', key: ChainId.POLYGON },
@@ -65,7 +65,7 @@ const fetchAllTokenListDetails = async (arg: ChainId, redisClient: any) => {
     { url: 'https://raw.githubusercontent.com/0xAnto/token-lists/main/fantom.json', key: ChainId.FANTOM },
   ];
 
-  for (const { url, key } of tokenListUrls_) {
+  for (const { url, key } of tokenListUrls) {
     await fetchAndStoreTokenListDetails(url, key, redisClient);
     if (arg === key) {
       try {
@@ -98,15 +98,7 @@ const retrieveTokenListDetailsFromRedis = async (key: ChainId, redisClient: any)
   }
 };
 
-const redisClient = createClient();
-redisClient
-  .connect()
-  .then(() => {
-    console.log('connected');
-  })
-  .catch(console.error);
-
-const fetchtoken: ValidatedEventAPIGatewayProxyEvent<typeof schema> = async (event) => {
+export const fetchToken: APIGatewayProxyHandler = async (event) => {
   const chainIdParam = event.queryStringParameters?.chainId;
   const chainId: ChainId = chainIdParam ? parseInt(chainIdParam) : ChainId.SOLANA;
 
@@ -153,5 +145,22 @@ const fetchtoken: ValidatedEventAPIGatewayProxyEvent<typeof schema> = async (eve
   });
 };
 
-export const main = middyfy(fetchtoken);
-//
+export const storeData: APIGatewayProxyHandler = async (event) => {
+  const { data } = JSON.parse(event.body); // Assuming the data is sent in the request body
+
+  try {
+    // Store the data in Redis
+    await redisClient.set('myData', JSON.stringify(data));
+
+    return formatJSONResponse({
+      message: 'Data stored successfully',
+    });
+  } catch (error) {
+    console.error('Failed to store data in Redis:', error);
+    return formatJSONResponse({
+      message: 'Failed to store data',
+    }, );
+  }
+};
+
+export const main = middyfy(fetchToken);
