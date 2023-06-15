@@ -154,4 +154,3 @@ const fetchtoken: ValidatedEventAPIGatewayProxyEvent<typeof schema> = async (eve
 };
 
 export const main = middyfy(fetchtoken);
-//
