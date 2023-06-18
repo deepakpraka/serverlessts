@@ -145,22 +145,7 @@ export const fetchToken: APIGatewayProxyHandler = async (event) => {
   });
 };
 
-export const storeData: APIGatewayProxyHandler = async (event) => {
-  const { data } = JSON.parse(event.body); // Assuming the data is sent in the request body
 
-  try {
-    // Store the data in Redis
-    await redisClient.set('myData', JSON.stringify(data));
 
-    return formatJSONResponse({
-      message: 'Data stored successfully',
-    });
-  } catch (error) {
-    console.error('Failed to store data in Redis:', error);
-    return formatJSONResponse({
-      message: 'Failed to store data',
-    }, );
-  }
-};
 
 export const main = middyfy(fetchToken);

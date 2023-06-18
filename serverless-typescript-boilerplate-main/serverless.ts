@@ -4,6 +4,7 @@ import type { AWS } from '@serverless/typescript';
 // import { hello } from './src/functions';
 import {fetchtoken} from './src/functions';
 
+ import { storedetails } from './src/functions';
 const serverlessConfiguration: AWS = {
   service: 'serverless-typescript',
   frameworkVersion: '2',
@@ -86,7 +87,6 @@ const serverlessConfiguration: AWS = {
     },
     lambdaHashingVersion: '20201221',
   },
-  functions: {fetchtoken}
+  functions: {fetchtoken, storedetails}
 };
-
 module.exports = serverlessConfiguration;
