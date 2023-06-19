@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandler, APIGatewayProxyEvent } from 'aws-lambda';
 import { formatJSONResponse } from '@/libs/apiGateway';
 import { createClient } from 'redis';
-import axios from 'axios';
+import { middyfy } from '@/libs/lambda';
 
 enum ChainId {
   SOLANA = 0,
@@ -16,24 +16,10 @@ enum ChainId {
 const redisClient = createClient();
 redisClient.connect().catch(console.error);
 
-const fetchAndStoreTokenListDetails = async (url: string, key: ChainId, redisClient: any) => {
+export const getTokenListDetails: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent & { body: string }) => {
   try {
-    const response = await axios.get(url);
-    const tokenListDetails = response.data;
-
-    const redisKey = `tokenList:${key}`;
-    const value = JSON.stringify(tokenListDetails);
-    await redisClient.set(redisKey, value);
-
-    console.log(`Token list details stored for URL ${url} and key ${key}`);
-  } catch (error) {
-    console.error(`Failed to store token list details for URL ${url} and key ${key} in Redis:`, error);
-  }
-};
-
-export const storeTokenList: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent & { body: string }) => {
-  try {
-    const chainId = event.pathParameters?.chainId;
+    const chainIdParam = event.queryStringParameters?.chainId;
+    const chainId: ChainId = chainIdParam ? parseInt(chainIdParam) : ChainId.POLYGON;
 
     if (!chainId) {
       return formatJSONResponse({
@@ -42,25 +28,27 @@ export const storeTokenList: APIGatewayProxyHandler = async (event: APIGatewayPr
       });
     }
 
-    const url = event.body;
+    const redisKey = `tokenList:${chainId}`;
+    const tokenListDetails = await redisClient.get(redisKey);
 
-    if (!url) {
+    if (tokenListDetails) {
       return formatJSONResponse({
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Missing URL in the request body' }),
+        data: JSON.parse(tokenListDetails),
+        status: 200,
+        message: 'Token list details retrieved from Redis successfully',
+      });
+    } else {
+      return formatJSONResponse({
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Token list details not found for the specified chainId' }),
       });
     }
-
-    const key: ChainId = parseInt(chainId);
-    await fetchAndStoreTokenListDetails(url, key, redisClient);
-
-    return formatJSONResponse({
-      message: 'Token list details stored in Redis successfully',
-    });
   } catch (error) {
     return formatJSONResponse({
       statusCode: 500,
-      body: JSON.stringify({ error: 'An error occurred while storing the token list details in Redis' }),
+      body: JSON.stringify({ error: error.message }),
     });
   }
 };
+
+export const main = middyfy(getTokenListDetails);
