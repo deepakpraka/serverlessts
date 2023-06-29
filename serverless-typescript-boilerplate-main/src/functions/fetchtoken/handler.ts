@@ -2,7 +2,7 @@ import 'source-map-support/register';
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatJSONResponse } from '@/libs/apiGateway';
 import { middyfy } from '@/libs/lambda';
-import axios from 'axios';
+import { createClient } from 'redis';
 
 enum ChainId {
   SOLANA = 0,
@@ -12,6 +12,7 @@ enum ChainId {
   ETHEREUM = 4,
   KLAYTN = 5,
   FANTOM = 6,
+  ALL = 8, // New enum value representing all token list details
 }
 
 const tokenListUrls = [
@@ -24,57 +25,87 @@ const tokenListUrls = [
   { url: 'https://raw.githubusercontent.com/0xAnto/token-lists/main/fantom.json', key: ChainId.FANTOM },
 ];
 
-const fetchTokenListDetails = async (url: string) => {
+const redisClient = createClient();
+redisClient.connect().catch(console.error);
+
+const retrieveTokenListDetailsFromRedis = async (key: ChainId) => {
   try {
-    const response = await axios.get(url);
-    const tokenListDetails = response.data;
-    const transformedDetails = tokenListDetails.map((value: any) => ({
-      address: value.address,
-      chainId: value.chainId,
-      symbol: value.symbol,
-      logoURI: value.logoURI,
-      coingecko_id: value.coingeckoId,
-      decimals: value.decimals,
-    }));
-    console.log(`Token list details for URL ${url}:`, transformedDetails);
-    return transformedDetails;
+    const redisKey = `tokenList:${key}`;
+    const value = await redisClient.get(redisKey);
+    if (value) {
+      const tokenListDetails = JSON.parse(value);
+      return tokenListDetails;
+    } else {
+      return null;
+    }
   } catch (error) {
-    console.error(`Failed to fetch token list details from URL ${url}:`, error);
+    console.error(`Failed to retrieve token list details from Redis for key ${key}:`, error);
     return null;
   }
 };
 
-export const fetchToken: APIGatewayProxyHandler = async (event) => {
+export const fetchtoken: APIGatewayProxyHandler = async (event) => {
   const { chainId } = event.queryStringParameters as any;
   let chainName: string;
-  
 
-  for (const { url, key } of tokenListUrls) {
+  if (Number(chainId) === ChainId.ALL) {
+    const allTokenListDetails = {};
+    try {
+      for (const { key } of tokenListUrls) {
+        const storedTokenListDetails = await retrieveTokenListDetailsFromRedis(key);
+        if (storedTokenListDetails) {
+          allTokenListDetails[key] = storedTokenListDetails;
+        }
+      }
+
+      console.log(`Token list details retrieved from Redis for all chains`);
+      return formatJSONResponse({
+        message: 'Token list details retrieved from Redis',
+        data: {
+          allTokenListDetails,
+        },
+      });
+    } catch (error) {
+      console.error(`Failed to retrieve token list details from Redis:`, error);
+      return formatJSONResponse({
+        message: 'Failed to retrieve token list details from Redis',
+      });
+    }
+  }
+
+  for (const {  key } of tokenListUrls) {
     if (Number(chainId) === key) {
       chainName = ChainId[key];
       try {
-        const tokenListDetails = await fetchTokenListDetails(url);
-        console.log(`Token list details for URL ${url}:`, tokenListDetails);
-
-        return formatJSONResponse({
-          message: 'Token list details retrieved successfully',
-          data: {
-            chainId,
-            chainName,
-            tokenListDetails,
-          },
-        });
+        const storedTokenListDetails = await retrieveTokenListDetailsFromRedis(key);
+        if (storedTokenListDetails) {
+          console.log(`Token list details retrieved from Redis for key ${key}`);
+          return formatJSONResponse({
+            message: 'Token list details retrieved from Redis',
+            data: {
+              chainId: key,
+              chainName,
+              tokenListDetails: storedTokenListDetails,
+            },
+          });
+        } else {
+          console.log(`Token list details not found in Redis for key ${key}`);
+          return formatJSONResponse({
+            message: 'Token list details not found in Redis',
+          });
+        }
       } catch (error) {
-        console.error(`Failed to fetch data for URL ${url}:`, error);
+        console.error(`Failed to retrieve token list details from Redis for key ${key}:`, error);
+        return formatJSONResponse({
+          message: 'Failed to retrieve token list details from Redis',
+        });
       }
     }
   }
 
-  console.error(`Token list details for chainId ${chainId} not found`);
   return formatJSONResponse({
-    message: `Token list details for chainId ${chainId} not found`,
-    data: null,
+    message: 'Invalid chainId provided',
   });
 };
 
-export const main = middyfy(fetchToken);
+export const main = middyfy(fetchtoken);
