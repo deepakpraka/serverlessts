@@ -1,8 +1,5 @@
 /* eslint-disable no-template-curly-in-string */
 import type { AWS } from '@serverless/typescript';
-
-
-
 import { hello } from './src/functions';
 import {fetchtoken} from './src/functions';
 import { storedetails } from './src/functions';
